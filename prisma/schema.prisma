@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  resetToken   String?   @map("reset_token")
+  resetTokenExp DateTime? @map("reset_token_exp")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  projects     Project[]
+
+  @@map("users")
+}
+
+model Project {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  title     String
+  purpose   String
+  status    ProjectStatus @default(DRAFT)
+  folderId  String?      @map("folder_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents Document[]
+  analysis  AnalysisResult?
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  DRAFT
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Document {
+  id                String    @id @default(uuid())
+  projectId         String    @map("project_id")
+  filename          String
+  googleDriveFileId String?   @map("google_drive_file_id")
+  fileType          FileType
+  fileSize          Int       @map("file_size")
+  uploadedAt        DateTime? @map("uploaded_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+enum FileType {
+  DRAFT
+  REFERENCE
+}
+
+model AnalysisResult {
+  id           String          @id @default(uuid())
+  projectId    String          @unique @map("project_id")
+  status       AnalysisStatus  @default(PENDING)
+  resultData   Json?           @map("result_data")
+  errorMessage String?         @map("error_message")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
