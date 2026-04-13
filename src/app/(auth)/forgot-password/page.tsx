@@ -4,7 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Loader2, Mail, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ForgotPasswordPage() {
@@ -26,14 +27,14 @@ export default function ForgotPasswordPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to send reset email')
+        toast.error(data.error || 'Gagal mengirim email')
         return
       }
 
       setEmailSent(true)
-      toast.success('Password reset link sent to your email')
+      toast.success('Link reset password telah dikirim')
     } catch {
-      toast.error('Something went wrong')
+      toast.error('Terjadi kesalahan')
     } finally {
       setIsLoading(false)
     }
@@ -41,56 +42,88 @@ export default function ForgotPasswordPage() {
 
   if (emailSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-slate-900">Cek Email Anda</CardTitle>
-            <CardDescription>
-              Kami telah mengirim link reset password ke email Anda
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-slate-600 mb-4">
-              Tidak menerima email? Cek folder spam atau coba lagi.
+      <Card className="border-slate-200/60 shadow-xl shadow-blue-600/5 bg-white/80 backdrop-blur-sm">
+        <CardContent className="pt-8 pb-6 px-8">
+          <div className="text-center">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-600/20">
+              <CheckCircle2 className="h-7 w-7 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Cek Email Anda</h1>
+            <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+              Kami telah mengirim link reset password ke<br />
+              <span className="font-medium text-slate-700">{email}</span>
             </p>
+            <div className="bg-slate-50 rounded-xl p-4 mb-6">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Tidak menerima email? Cek folder spam atau tunggu beberapa menit lalu coba lagi.
+              </p>
+            </div>
             <Link href="/login">
-              <Button variant="outline">Kembali ke Login</Button>
+              <Button className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-600/20 text-white font-medium">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Kembali ke Login
+              </Button>
             </Link>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-slate-900">Lupa Password</CardTitle>
-          <CardDescription>Masukkan email untuk reset password</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">Email</label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="email@example.com"
-                value={email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Sending...' : 'Kirim Link Reset'}
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            <Link href="/login" className="text-slate-600 hover:underline">Kembali ke Login</Link>
+    <Card className="border-slate-200/60 shadow-xl shadow-blue-600/5 bg-white/80 backdrop-blur-sm">
+      <CardContent className="pt-8 pb-6 px-8">
+        <div className="text-center mb-8">
+          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/20">
+            <Mail className="h-6 w-6 text-white" />
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <h1 className="text-2xl font-bold text-slate-900">Lupa Password?</h1>
+          <p className="text-slate-500 mt-1.5 text-sm leading-relaxed">
+            Masukkan email yang terdaftar. Kami akan mengirim link untuk mereset password Anda.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-sm font-medium text-slate-700">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="nama@email.com"
+              value={email}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+              required
+              className="h-11 bg-white/60 border-slate-200"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-600/20 text-white font-medium"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Mengirim...
+              </>
+            ) : (
+              'Kirim Link Reset'
+            )}
+          </Button>
+        </form>
+
+        <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Kembali ke Login
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
