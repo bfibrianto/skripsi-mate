@@ -13,9 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ArrowLeft, Upload, FileText, Play, Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
-type ProjectStatus = 'DRAFT' | 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+type ProjectStatus = 'DRAFT' | 'UPLOADING' | 'PROCESSING_REFERENCES' | 'PROCESSING_CITATIONS' | 'COMPLETED' | 'FAILED'
 type FileType = 'DRAFT' | 'REFERENCE'
-type AnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+type AnalysisStatus = 'PENDING' | 'PROCESSING_REFERENCES' | 'PROCESSING_CITATIONS' | 'COMPLETED' | 'FAILED'
 
 interface Document {
   id: string
@@ -55,7 +55,8 @@ function getStatusIcon(status: ProjectStatus | AnalysisStatus) {
     case 'PENDING':
       return <AlertCircle className="h-4 w-4 text-slate-500" />
     case 'UPLOADING':
-    case 'PROCESSING':
+    case 'PROCESSING_REFERENCES':
+    case 'PROCESSING_CITATIONS':
       return <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
     case 'COMPLETED':
       return <CheckCircle className="h-4 w-4 text-green-600" />
@@ -103,7 +104,12 @@ export default function ProjectDetailPage() {
   }, [fetchProject])
 
   useEffect(() => {
-    if (project?.status === 'PROCESSING' || project?.analysis?.status === 'PROCESSING') {
+    if (
+      project?.status === 'PROCESSING_REFERENCES' ||
+      project?.status === 'PROCESSING_CITATIONS' ||
+      project?.analysis?.status === 'PROCESSING_REFERENCES' ||
+      project?.analysis?.status === 'PROCESSING_CITATIONS'
+    ) {
       const interval = setInterval(() => {
         fetchProject()
       }, 5000)
@@ -203,7 +209,11 @@ export default function ProjectDetailPage() {
   const draftDoc = project.documents.find(d => d.fileType === 'DRAFT')
   const referenceDocs = project.documents.filter(d => d.fileType === 'REFERENCE')
   const canAnalyze = draftDoc && referenceDocs.length > 0 && project.status === 'DRAFT'
-  const isProcessing = project.status === 'PROCESSING' || project.analysis?.status === 'PROCESSING'
+  const isProcessing =
+    project.status === 'PROCESSING_REFERENCES' ||
+    project.status === 'PROCESSING_CITATIONS' ||
+    project.analysis?.status === 'PROCESSING_REFERENCES' ||
+    project.analysis?.status === 'PROCESSING_CITATIONS'
   const isCompleted = project.status === 'COMPLETED' || project.analysis?.status === 'COMPLETED'
 
   return (
@@ -226,7 +236,14 @@ export default function ProjectDetailPage() {
                 </div>
                 <Badge variant={project.status === 'COMPLETED' ? 'outline' : project.status === 'FAILED' ? 'destructive' : 'default'}>
                   {getStatusIcon(project.status)}
-                  <span className="ml-1">{project.status}</span>
+                  <span className="ml-1">
+                    {project.status === 'DRAFT' ? 'Draft'
+                      : project.status === 'UPLOADING' ? 'Mengunggah'
+                      : project.status === 'PROCESSING_REFERENCES' ? 'Analisis Referensi'
+                      : project.status === 'PROCESSING_CITATIONS' ? 'Analisis Sitasi'
+                      : project.status === 'COMPLETED' ? 'Selesai'
+                      : 'Gagal'}
+                  </span>
                 </Badge>
               </div>
             </CardHeader>
@@ -352,7 +369,12 @@ export default function ProjectDetailPage() {
                         </TableCell>
                         <TableCell>{formatFileSize(doc.fileSize)}</TableCell>
                         <TableCell>
-                          {doc.googleDriveFileId ? (
+                          {doc.fileType === 'DRAFT' ? (
+                            <span className="text-green-600 flex items-center gap-1">
+                              <CheckCircle className="h-4 w-4" />
+                              Tersimpan
+                            </span>
+                          ) : doc.googleDriveFileId ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <CheckCircle className="h-4 w-4" />
                               Terupload
@@ -414,9 +436,18 @@ export default function ProjectDetailPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-blue-600">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Sedang menganalisis...
+                    {project.status === 'PROCESSING_REFERENCES' || project.analysis?.status === 'PROCESSING_REFERENCES'
+                      ? 'Menganalisis referensi...'
+                      : 'Menganalisis sitasi...'}
                   </div>
-                  <Progress value={45} className="h-2" />
+                  <Progress
+                    value={
+                      project.status === 'PROCESSING_REFERENCES' || project.analysis?.status === 'PROCESSING_REFERENCES'
+                        ? 40
+                        : 75
+                    }
+                    className="h-2"
+                  />
                   <p className="text-xs text-slate-500">
                     Proses dilakukan secara asinkron. Anda dapat menutup halaman ini dan kembali nanti.
                   </p>

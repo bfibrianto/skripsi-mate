@@ -40,7 +40,8 @@ model Project {
 enum ProjectStatus {
   DRAFT
   UPLOADING
-  PROCESSING
+  PROCESSING_REFERENCES
+  PROCESSING_CITATIONS
   COMPLETED
   FAILED
 }
@@ -52,6 +53,7 @@ model Document {
   googleDriveFileId String?   @map("google_drive_file_id")
   fileType          FileType
   fileSize          Int       @map("file_size")
+  fileData          Bytes?    @map("file_data")
   uploadedAt        DateTime? @map("uploaded_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -79,7 +81,8 @@ model AnalysisResult {
 
 enum AnalysisStatus {
   PENDING
-  PROCESSING
+  PROCESSING_REFERENCES
+  PROCESSING_CITATIONS
   COMPLETED
   FAILED
 }

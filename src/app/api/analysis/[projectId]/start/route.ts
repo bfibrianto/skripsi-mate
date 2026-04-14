@@ -21,9 +21,7 @@ export async function POST(
         userId: user.id
       },
       include: {
-        documents: {
-          where: { fileType: 'DRAFT' }
-        }
+        documents: true
       }
     })
 
@@ -31,20 +29,22 @@ export async function POST(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    if (project.documents.length === 0) {
+    const draftDoc = project.documents.find((d) => d.fileType === 'DRAFT')
+    const referenceDocs = project.documents.filter((d) => d.fileType === 'REFERENCE')
+
+    if (!draftDoc) {
       return NextResponse.json(
         { error: 'No draft file uploaded' },
         { status: 400 }
       )
     }
 
-    const referenceDocs = await prisma.document.findMany({
-      where: {
-        projectId,
-        fileType: 'REFERENCE'
-      },
-      select: { id: true, googleDriveFileId: true, filename: true }
-    })
+    if (!draftDoc.fileData) {
+      return NextResponse.json(
+        { error: 'Draft file data not found' },
+        { status: 400 }
+      )
+    }
 
     if (referenceDocs.length === 0) {
       return NextResponse.json(
@@ -53,35 +53,34 @@ export async function POST(
       )
     }
 
-    const draftDoc = project.documents[0]
+    if (!project.folderId) {
+      return NextResponse.json(
+        { error: 'Project folder not initialized' },
+        { status: 400 }
+      )
+    }
 
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL
+    const n8nReferenceUrl = process.env.N8N_REFERENCE_WEBHOOK_URL
     const n8nApiKey = process.env.N8N_API_KEY
 
-    if (!n8nWebhookUrl) {
-      console.error('N8N_WEBHOOK_URL not configured')
+    if (!n8nReferenceUrl) {
+      console.error('N8N_REFERENCE_WEBHOOK_URL not configured')
       return NextResponse.json(
         { error: 'Analysis service not configured' },
         { status: 500 }
       )
     }
 
-    let analysisResult = await prisma.analysisResult.findUnique({
-      where: { projectId }
-    })
-
-    if (!analysisResult) {
-      analysisResult = await prisma.analysisResult.create({
-        data: {
-          projectId,
-          status: 'PROCESSING'
-        }
+    // Set status ke PROCESSING_REFERENCES
+    if (!await prisma.analysisResult.findUnique({ where: { projectId } })) {
+      await prisma.analysisResult.create({
+        data: { projectId, status: 'PROCESSING_REFERENCES' }
       })
     } else {
       await prisma.analysisResult.update({
         where: { projectId },
         data: {
-          status: 'PROCESSING',
+          status: 'PROCESSING_REFERENCES',
           resultData: undefined,
           errorMessage: null
         }
@@ -90,52 +89,44 @@ export async function POST(
 
     await prisma.project.update({
       where: { id: projectId },
-      data: { status: 'PROCESSING' }
+      data: { status: 'PROCESSING_REFERENCES' }
     })
 
-    const n8nPayload = {
-      project_id: projectId,
-      draft_file_id: draftDoc.googleDriveFileId,
-      draft_filename: draftDoc.filename,
-      reference_files: referenceDocs.map((doc: { googleDriveFileId: string | null; filename: string }) => ({
-        file_id: doc.googleDriveFileId,
-        filename: doc.filename
-      })),
-      project_title: project.title,
-      project_purpose: project.purpose,
-      timestamp: new Date().toISOString()
-    }
+    // Kirim ke n8n: hanya folder_id (referensi ada di Google Drive dalam folder tersebut)
+    // File DRAFT dikirim sebagai multipart
+    const formData = new FormData()
+    formData.append('project_id', projectId)
+    formData.append('folder_id', project.folderId)
+
+    const draftBlob = new Blob([draftDoc.fileData], {
+      type: 'application/octet-stream'
+    })
+    formData.append('draft_file', draftBlob, draftDoc.filename)
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      }
-
+      const headers: Record<string, string> = {}
       if (n8nApiKey) {
-        headers['Authorization'] = `Bearer ${n8nApiKey}`
+        headers['api_key'] = n8nApiKey
       }
 
-      const n8nResponse = await fetch(n8nWebhookUrl, {
+      const n8nResponse = await fetch(n8nReferenceUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify(n8nPayload)
-      }).catch((err) => {
-        console.error('n8n webhook request failed:', err)
-        return null
+        body: formData
       })
 
-      if (n8nResponse && !n8nResponse.ok) {
-        console.error('n8n webhook returned error:', n8nResponse.status, await n8nResponse.text())
+      if (!n8nResponse.ok) {
+        const text = await n8nResponse.text()
+        console.error('n8n reference webhook returned error:', n8nResponse.status, text)
       }
-
     } catch (n8nError) {
-      console.error('Error calling n8n webhook:', n8nError)
+      console.error('Error calling n8n reference webhook:', n8nError)
     }
 
     return NextResponse.json({
       success: true,
       message: 'Analysis started',
-      projectStatus: 'PROCESSING'
+      projectStatus: 'PROCESSING_REFERENCES'
     })
 
   } catch (error) {

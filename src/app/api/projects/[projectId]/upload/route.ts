@@ -3,30 +3,6 @@ import prisma from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { uploadFile, getMimeType } from '@/lib/google-drive'
 
-function parseFormData(form: any): Promise<{ fields: any; files: any }> {
-  return new Promise((resolve, reject) => {
-    const fields: any = {}
-    const files: any = {}
-
-    form.on('field', (field: string, value: any) => {
-      fields[field] = value
-    })
-
-    form.on('file', (field: string, file: any) => {
-      if (!files[field]) {
-        files[field] = []
-      }
-      files[field].push(file)
-    })
-
-    form.on('end', () => {
-      resolve({ fields, files })
-    })
-
-    form.on('error', reject)
-  })
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
@@ -71,30 +47,19 @@ export async function POST(
     
     const draftFile = formData.get('draft') as File | null
     const referenceFiles = formData.getAll('references') as File[]
-    
-    const allFiles: { file: File; type: 'DRAFT' | 'REFERENCE' }[] = []
-    
-    if (draftFile) {
-      allFiles.push({ file: draftFile, type: 'DRAFT' })
-    }
-    
-    for (const refFile of referenceFiles) {
-      allFiles.push({ file: refFile, type: 'REFERENCE' })
-    }
 
-    if (allFiles.length === 0) {
+    if (!draftFile && referenceFiles.length === 0) {
       return NextResponse.json(
         { error: 'No files provided' },
         { status: 400 }
       )
     }
 
-    const MAX_FILE_SIZE = 10 * 1024 * 1024
     const MAX_FILES = 20
 
-    if (allFiles.length > MAX_FILES) {
+    if (referenceFiles.length > MAX_FILES) {
       return NextResponse.json(
-        { error: `Maximum ${MAX_FILES} files allowed` },
+        { error: `Maximum ${MAX_FILES} reference files allowed` },
         { status: 400 }
       )
     }
@@ -104,40 +69,77 @@ export async function POST(
       data: { status: 'UPLOADING' }
     })
 
-    const uploadPromises = allFiles.map(async ({ file, type }) => {
-      const arrayBuffer = await file.arrayBuffer()
+    const documents = []
+
+    // File DRAFT: simpan ke DB (tidak diupload ke Google Drive)
+    if (draftFile) {
+      const arrayBuffer = await draftFile.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
-      const mimeType = getMimeType(file.name)
-      
-      const googleDriveFileId = await uploadFile(
-        project.folderId!,
-        buffer,
-        file.name,
-        mimeType
-      )
+
+      // Hapus dokumen DRAFT lama jika ada
+      await prisma.document.deleteMany({
+        where: { projectId, fileType: 'DRAFT' }
+      })
 
       const document = await prisma.document.create({
         data: {
           projectId,
-          filename: file.name,
-          googleDriveFileId,
-          fileType: type,
+          filename: draftFile.name,
+          fileType: 'DRAFT',
           fileSize: buffer.length,
+          fileData: buffer,
           uploadedAt: new Date()
         }
       })
 
-      return document
-    })
+      documents.push(document)
+    }
 
-    const documents = await Promise.all(uploadPromises)
+    // File REFERENCE: upload ke Google Drive
+    if (referenceFiles.length > 0) {
+      const uploadPromises = referenceFiles.map(async (file) => {
+        const arrayBuffer = await file.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        const mimeType = getMimeType(file.name)
+
+        const googleDriveFileId = await uploadFile(
+          project.folderId!,
+          buffer,
+          file.name,
+          mimeType
+        )
+
+        const document = await prisma.document.create({
+          data: {
+            projectId,
+            filename: file.name,
+            googleDriveFileId,
+            fileType: 'REFERENCE',
+            fileSize: buffer.length,
+            uploadedAt: new Date()
+          }
+        })
+
+        return document
+      })
+
+      const refDocuments = await Promise.all(uploadPromises)
+      documents.push(...refDocuments)
+    }
 
     await prisma.project.update({
       where: { id: projectId },
       data: { status: 'DRAFT' }
     })
 
-    return NextResponse.json({ documents })
+    // Jangan kembalikan fileData di response
+    const sanitized = documents.map(({ ...doc }) => {
+      const { fileData, ...rest } = doc as typeof doc & { fileData?: unknown }
+      void fileData
+      return rest
+    })
+
+    return NextResponse.json({ documents: sanitized })
   } catch (error) {
     console.error('Upload error:', error)
     
