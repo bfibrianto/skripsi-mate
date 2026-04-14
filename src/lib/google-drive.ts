@@ -1,39 +1,19 @@
 import { google } from 'googleapis'
-
-const SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly'
-]
+import { Readable } from 'stream'
 
 function getGoogleDriveClient() {
-  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-  
-  if (!credentials) {
-    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is not configured')
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must all be configured')
   }
 
-  let parsedCredentials: any
-  
-  try {
-    parsedCredentials = JSON.parse(credentials)
-  } catch (error) {
-    console.error('Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:', error)
-    console.error('Raw credentials length:', credentials.length)
-    console.error('Credentials starts with:', credentials.substring(0, 50))
-    throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_KEY format. Must be valid JSON wrapped in single quotes.')
-  }
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret)
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
 
-  if (!parsedCredentials.client_email) {
-    console.error('Parsed credentials missing client_email. Available keys:', Object.keys(parsedCredentials))
-    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY missing client_email field. Ensure the JSON key is correctly formatted.')
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: parsedCredentials,
-    scopes: SCOPES
-  })
-
-  return google.drive({ version: 'v3', auth })
+  return google.drive({ version: 'v3', auth: oauth2Client })
 }
 
 export async function createFolder(projectTitle: string, userName: string): Promise<string> {
@@ -70,6 +50,8 @@ export async function uploadFile(
 ): Promise<string> {
   const drive = getGoogleDriveClient()
 
+  const stream = Readable.from(file)
+
   const response = await drive.files.create({
     requestBody: {
       name: filename,
@@ -77,7 +59,7 @@ export async function uploadFile(
     },
     media: {
       mimeType,
-      body: file
+      body: stream
     },
     fields: 'id'
   })
